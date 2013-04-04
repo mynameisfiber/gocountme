@@ -64,7 +64,7 @@ var (
 
 type Element struct {
 	Method string    `json:"method"`
-	Set    []Element `json:"method,omitempty"`
+	Set    []Element `json:"set,omitempty"`
 	Keys   []string  `json:"keys,omitempty"`
 }
 
