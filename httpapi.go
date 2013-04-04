@@ -14,11 +14,12 @@ import (
 var RequestChan chan RequestCommand
 
 var (
-	VERSION     = "0.1"
-	showVersion = flag.Bool("version", false, "print version string")
-	httpAddress = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
-	nWorkers    = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
-	defaultSize = flag.Int64("default-size", 512, "Default size for KMin Value sets")
+	VERSION         = "0.1"
+	showVersion     = flag.Bool("version", false, "print version string")
+	httpAddress     = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
+	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
+	defaultSize     = flag.Int64("default-size", 512, "Default size for KMin Value sets")
+	leveldbLRUCache = flag.Int("lru-cache", 1<<10, "LRU Cache size for LevelDB")
 )
 
 func GetHandler(w http.ResponseWriter, r *http.Request) {
@@ -184,9 +185,10 @@ func main() {
 		return
 	}
 
+	log.Println("Opening levelDB")
 	Default_KMinValues_Size = uint64(*defaultSize)
 	opts := levigo.NewOptions()
-	opts.SetCache(levigo.NewLRUCache(1024))
+	opts.SetCache(levigo.NewLRUCache(*leveldbLRUCache))
 	opts.SetCreateIfMissing(true)
 	db, err := levigo.Open("./db/tmp", opts)
 	defer db.Close()
@@ -197,6 +199,7 @@ func main() {
 
 	RequestChan = make(chan RequestCommand, *nWorkers)
 	workerWaitGroup := sync.WaitGroup{}
+	log.Printf("Starting %d workers", *nWorkers)
 	for i := 0; i < *nWorkers; i++ {
 		go func(id int) {
 			workerWaitGroup.Add(1)
