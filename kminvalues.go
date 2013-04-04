@@ -9,7 +9,7 @@ import (
 )
 
 var Hash_Max = 1<<31 - 1
-var Default_Capacity = uint64(4) //1 << 10)
+var Default_KMinValues_Size = uint64(4) //1 << 10)
 
 type KMinValues struct {
 	Data    []int64 `json:'data'`
@@ -25,8 +25,7 @@ func NewKMinValues(capacity uint64) KMinValues {
 
 func KMinValuesFromBytes(raw []byte) KMinValues {
 	if len(raw) == 0 {
-		log.Println("empty byte array")
-		return NewKMinValues(Default_Capacity)
+		return NewKMinValues(Default_KMinValues_Size)
 	}
 	buf := bytes.NewBuffer(raw)
 
@@ -34,7 +33,7 @@ func KMinValuesFromBytes(raw []byte) KMinValues {
 	err := binary.Read(buf, binary.LittleEndian, &maxSize)
 	if err != nil {
 		log.Println("error reading size")
-		return NewKMinValues(Default_Capacity)
+		return NewKMinValues(Default_KMinValues_Size)
 	}
 
 	s := uint64((len(raw) - 8) / 8)
@@ -162,15 +161,17 @@ func (kmv *KMinValues) Cardinality() float64 {
 		return float64(len(kmv.Data))
 	}
 
-	return float64((kmv.MaxSize-1.0)*(1<<64-1)) / float64(kmv.Data[0])
+	return float64(kmv.MaxSize-1.0) / (float64(kmv.Data[0])/float64(1<<64-1) + 0.5)
 }
 
 // Returns a new KMinValues object is the union between the current and the
 // given objects
-func (kmv *KMinValues) Union(other KMinValues) KMinValues {
+func (kmv *KMinValues) Union(others ...KMinValues) KMinValues {
 	maxsize := kmv.MaxSize
-	if maxsize > other.MaxSize {
-		maxsize = other.MaxSize
+	for _, other := range others {
+		if maxsize > other.MaxSize {
+			maxsize = other.MaxSize
+		}
 	}
 
 	newkmv := NewKMinValues(maxsize)
@@ -178,8 +179,10 @@ func (kmv *KMinValues) Union(other KMinValues) KMinValues {
 	for _, h := range kmv.Data {
 		newkmv.AddHash(h)
 	}
-	for _, h := range other.Data {
-		newkmv.AddHash(h)
+	for _, other := range others {
+		for _, h := range other.Data {
+			newkmv.AddHash(h)
+		}
 	}
 
 	return newkmv

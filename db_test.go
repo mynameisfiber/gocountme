@@ -7,13 +7,24 @@ import (
 	"testing"
 )
 
-var RequestChan chan Request
-
 func TestDB(t *testing.T) {
 	SetupDB()
 	defer CloseDB()
 
 	key := "_GOTEST_TESTDB"
+	resultChan := make(chan Result)
+
+	clean := func() {
+		delRequest := DeleteRequest{
+			Key:        key,
+			ResultChan: resultChan,
+		}
+		RequestChan <- delRequest
+		<-resultChan
+	}
+	clean()
+	defer clean()
+
 	kmv := NewKMinValues(50)
 
 	for i := 0; i < 100; i++ {
@@ -22,7 +33,6 @@ func TestDB(t *testing.T) {
 
 	origCard := kmv.Cardinality()
 
-	resultChan := make(chan Result)
 	setRequest := SetRequest{
 		Key:        key,
 		Kmv:        &kmv,

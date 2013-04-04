@@ -10,9 +10,8 @@ var (
 	NotImplemented = fmt.Errorf("Not Implemented")
 )
 
-var RequestChan chan RequestCommand
-
 type Result struct {
+	Key   string
 	Data  *KMinValues
 	Error error
 }
@@ -33,6 +32,11 @@ type SetRequest struct {
 	ResultChan chan Result
 }
 
+type DeleteRequest struct {
+	Key        string
+	ResultChan chan Result
+}
+
 type AddHashRequest struct {
 	Key        string
 	Hash       int64
@@ -46,15 +50,23 @@ type ResizeRequest struct {
 }
 
 func (gr GetRequest) WriteResult(result Result) {
+	result.Key = gr.Key
 	gr.ResultChan <- result
 }
 func (sr SetRequest) WriteResult(result Result) {
+	result.Key = sr.Key
 	sr.ResultChan <- result
 }
+func (dr DeleteRequest) WriteResult(result Result) {
+	result.Key = dr.Key
+	dr.ResultChan <- result
+}
 func (ahr AddHashRequest) WriteResult(result Result) {
+	result.Key = ahr.Key
 	ahr.ResultChan <- result
 }
 func (rr ResizeRequest) WriteResult(result Result) {
+	result.Key = rr.Key
 	rr.ResultChan <- result
 }
 
@@ -82,6 +94,17 @@ func (sr SetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *le
 	err := database.Put(wo, keyBytes, sr.Kmv.Bytes())
 
 	return sr.Kmv, err
+}
+
+func (dr DeleteRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+	if dr.Key == "" {
+		return nil, NoKeySpecified
+	}
+
+	keyBytes := []byte(dr.Key)
+	err := database.Delete(wo, keyBytes)
+
+	return nil, err
 }
 
 func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
@@ -125,7 +148,7 @@ func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo 
 	return &kmv, err
 }
 
-func levelDBWorker(database *levigo.DB, requestChan chan Request) error {
+func levelDBWorker(database *levigo.DB, requestChan chan RequestCommand) error {
 	ro := levigo.NewReadOptions()
 	wo := levigo.NewWriteOptions()
 	defer ro.Close()

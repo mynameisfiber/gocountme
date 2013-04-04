@@ -35,39 +35,43 @@ func GetHash(key []byte) int64 {
 }
 
 func TestKMinValuesCardinality(t *testing.T) {
-	kmv := NewKMinValues(50)
+	kmv := NewKMinValues(1000)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 2000; i++ {
 		kmv.AddHash(GetRandHash())
 	}
 
 	card := kmv.Cardinality()
-	relError := (card - 100.0) / 100.0
+	relError := (card - 2000.0) / 2000.0
 	theoryError := kmv.RelativeError()
-	if relError > theoryError {
+	// We give an extra 2x wiggle room for the error because we really aren't
+	// using an optimal hashing function for the problem
+	if relError > theoryError*2 {
 		t.Errorf("Relative error too high: %f instead of %f", relError, theoryError)
 		t.FailNow()
 	}
 }
 
 func TestKMinValuesUnion(t *testing.T) {
-	kmv1 := NewKMinValues(50)
-	kmv2 := NewKMinValues(50)
+	kmv1 := NewKMinValues(1000)
+	kmv2 := NewKMinValues(1000)
 
-	for i := 0; i < 100; i++ {
+	for i := 0; i < 1000; i++ {
 		hash := GetHash([]byte(fmt.Sprintf("%d", i)))
 		kmv1.AddHash(hash)
 	}
-	for i := 50; i < 150; i++ {
+	for i := 50; i < 1500; i++ {
 		hash := GetHash([]byte(fmt.Sprintf("%d", i)))
 		kmv2.AddHash(hash)
 	}
 
 	kmv3 := kmv1.Union(kmv2)
 	card := kmv3.Cardinality()
-	relError := (card - 150.0) / 150.0
+	relError := (card - 1500.0) / 1500.0
 	theoryError := kmv3.RelativeError()
-	if relError > theoryError {
+	// We give an extra 2x wiggle room for the error because we really aren't
+	// using an optimal hashing function for the problem
+	if relError > theoryError*2 {
 		t.Errorf("Relative error too high: %f instead of %f", relError, theoryError)
 		t.FailNow()
 	}
