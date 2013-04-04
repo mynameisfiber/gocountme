@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"log"
+	"math"
 	"sort"
 )
 
@@ -11,8 +12,8 @@ var Hash_Max = 1<<31 - 1
 var Default_Capacity = uint64(4) //1 << 10)
 
 type KMinValues struct {
-	Data    []int64
-	MaxSize uint64
+	Data    []int64 `json:'data'`
+	MaxSize uint64  `json:'k'`
 }
 
 func NewKMinValues(capacity uint64) KMinValues {
@@ -154,4 +155,36 @@ func (kmv *KMinValues) increaseCapacity(newcap uint64) bool {
 	}
 	kmv.Data = newarray
 	return true
+}
+
+func (kmv *KMinValues) Cardinality() float64 {
+	if uint64(len(kmv.Data)) < kmv.MaxSize {
+		return float64(len(kmv.Data))
+	}
+
+	return float64((kmv.MaxSize-1.0)*(1<<64-1)) / float64(kmv.Data[0])
+}
+
+// Returns a new KMinValues object is the union between the current and the
+// given objects
+func (kmv *KMinValues) Union(other KMinValues) KMinValues {
+	maxsize := kmv.MaxSize
+	if maxsize > other.MaxSize {
+		maxsize = other.MaxSize
+	}
+
+	newkmv := NewKMinValues(maxsize)
+
+	for _, h := range kmv.Data {
+		newkmv.AddHash(h)
+	}
+	for _, h := range other.Data {
+		newkmv.AddHash(h)
+	}
+
+	return newkmv
+}
+
+func (kmv *KMinValues) RelativeError() float64 {
+	return math.Sqrt(2.0 / (math.Pi * float64(kmv.MaxSize-2)))
 }
