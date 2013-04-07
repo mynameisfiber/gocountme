@@ -9,11 +9,15 @@ func TestUnionCard(t *testing.T) {
 	SetupDB()
 	query := `
 {
-    "method" : "cardinality",
+    "method" : "jaccard",
     "set" : [
         {
             "method" : "union",
             "keys" : ["test1", "test2"]
+        }, 
+        {
+            "method" : "get",
+            "keys" : ["test3"]
         }
     ]
 }

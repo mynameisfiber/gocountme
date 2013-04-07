@@ -82,7 +82,7 @@ func (gr GetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *le
 
 	// TODO: add error handling in FromBytes
 	kmv := KMinValuesFromBytes(data)
-	return &kmv, nil
+	return kmv, nil
 }
 
 func (sr SetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
@@ -123,7 +123,7 @@ func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, w
 	kmv.AddHash(ahr.Hash)
 
 	err = database.Put(wo, keyBytes, kmv.Bytes())
-	return &kmv, err
+	return kmv, err
 }
 
 func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
@@ -141,11 +141,11 @@ func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo 
 	kmv := KMinValuesFromBytes(data)
 	err = kmv.Resize(rr.NewSize)
 	if err != nil {
-		return &kmv, err
+		return kmv, err
 	}
 
 	err = database.Put(wo, keyBytes, kmv.Bytes())
-	return &kmv, err
+	return kmv, err
 }
 
 func levelDBWorker(database *levigo.DB, requestChan chan RequestCommand) error {

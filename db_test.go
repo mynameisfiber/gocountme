@@ -35,7 +35,7 @@ func TestDB(t *testing.T) {
 
 	setRequest := SetRequest{
 		Key:        key,
-		Kmv:        &kmv,
+		Kmv:        kmv,
 		ResultChan: resultChan,
 	}
 	RequestChan <- setRequest

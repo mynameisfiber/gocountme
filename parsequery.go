@@ -58,8 +58,10 @@ import (
 var (
 	KeysAndSetError            = fmt.Errorf("Both keys and set are specified in query")
 	CardinalitySingleTermError = fmt.Errorf("Method 'cardinality' can only take in one data source")
+	GetSingleTermError         = fmt.Errorf("Method 'get' can only take in one data source")
 	SetNeedsKMV                = fmt.Errorf("Set specified with float output")
 	InvalidMethod              = fmt.Errorf("Unrecognized method")
+	MethodSetSize              = fmt.Errorf("Method requires 2+ sets or keys")
 )
 
 type Element struct {
@@ -88,10 +90,10 @@ func parseQuery(e *Element) (*QueryResult, error) {
 		return nil, KeysAndSetError
 	}
 
-	var data []KMinValues
+	var data []*KMinValues
 
 	if len(e.Keys) != 0 {
-		data = make([]KMinValues, len(e.Keys))
+		data = make([]*KMinValues, len(e.Keys))
 		resultChan := make(chan Result, len(e.Keys)+1)
 		for _, key := range e.Keys {
 			getRequest := GetRequest{
@@ -103,9 +105,9 @@ func parseQuery(e *Element) (*QueryResult, error) {
 		i := 1
 		for result := range resultChan {
 			if result.Key == e.Keys[0] {
-				data[0] = *result.Data
+				data[0] = result.Data
 			} else {
-				data[i] = *result.Data
+				data[i] = result.Data
 				i++
 			}
 			if i == len(e.Keys) && &data[0] != nil {
@@ -113,7 +115,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 			}
 		}
 	} else if len(e.Set) != 0 {
-		data = make([]KMinValues, len(e.Set))
+		data = make([]*KMinValues, len(e.Set))
 		for i := 0; i < len(e.Set); i++ {
 			tmp, err := parseQuery(&e.Set[i])
 			if err != nil {
@@ -121,7 +123,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 			} else if tmp.Kmv == nil {
 				return nil, SetNeedsKMV
 			}
-			data[i] = *(tmp.Kmv)
+			data[i] = tmp.Kmv
 		}
 	}
 
@@ -130,9 +132,35 @@ func parseQuery(e *Element) (*QueryResult, error) {
 			return nil, CardinalitySingleTermError
 		}
 		return &QueryResult{Num: data[0].Cardinality()}, nil
+	} else if e.Method == "get" {
+		if len(data) != 1 {
+			return nil, CardinalitySingleTermError
+		}
+		return &QueryResult{Kmv: data[0]}, nil
 	} else if e.Method == "union" {
+		if len(data) < 2 {
+			return nil, MethodSetSize
+		}
 		tmp := data[0].Union(data[1:]...)
-		return &QueryResult{Kmv: &tmp}, nil
+		return &QueryResult{Kmv: tmp}, nil
+	} else if e.Method == "jaccard" {
+		if len(data) < 2 {
+			return nil, MethodSetSize
+		}
+		tmp := data[0].Jaccard(data[1:]...)
+		return &QueryResult{Num: tmp}, nil
+	} else if e.Method == "cardinality_intersection" {
+		if len(data) < 2 {
+			return nil, MethodSetSize
+		}
+		tmp := data[0].CardinalityIntersection(data[1:]...)
+		return &QueryResult{Num: tmp}, nil
+	} else if e.Method == "cardinality_union" {
+		if len(data) < 2 {
+			return nil, MethodSetSize
+		}
+		tmp := data[0].CardinalityUnion(data[1:]...)
+		return &QueryResult{Num: tmp}, nil
 	}
 	return nil, InvalidMethod
 }

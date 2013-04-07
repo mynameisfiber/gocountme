@@ -11,19 +11,46 @@ import (
 var Hash_Max = 1<<31 - 1
 var Default_KMinValues_Size = uint64(4) //1 << 10)
 
+func Union(others ...*KMinValues) *KMinValues {
+	maxsize := smallestK(others...)
+	newkmv := NewKMinValues(maxsize)
+
+	for _, other := range others {
+		for _, h := range other.Data {
+			newkmv.AddHash(h)
+		}
+	}
+
+	return newkmv
+}
+
+func cardinality(maxSize uint64, kMin int64) float64 {
+	return float64(maxSize-1.0) / (float64(kMin)/float64(1<<64-1) + 0.5)
+}
+
+func smallestK(others ...*KMinValues) uint64 {
+	minsize := others[0].MaxSize
+	for _, other := range others[1:] {
+		if minsize > other.MaxSize {
+			minsize = other.MaxSize
+		}
+	}
+	return minsize
+}
+
 type KMinValues struct {
 	Data    []int64 `json:'data'`
 	MaxSize uint64  `json:'k'`
 }
 
-func NewKMinValues(capacity uint64) KMinValues {
-	return KMinValues{
+func NewKMinValues(capacity uint64) *KMinValues {
+	return &KMinValues{
 		Data:    make([]int64, 0, capacity),
 		MaxSize: capacity,
 	}
 }
 
-func KMinValuesFromBytes(raw []byte) KMinValues {
+func KMinValuesFromBytes(raw []byte) *KMinValues {
 	if len(raw) == 0 {
 		return NewKMinValues(Default_KMinValues_Size)
 	}
@@ -57,7 +84,7 @@ func KMinValuesFromBytes(raw []byte) KMinValues {
 			kmv.AddHash(tmp)
 		}
 	}
-	return kmv
+	return &kmv
 }
 
 func (kmv *KMinValues) Bytes() []byte {
@@ -92,6 +119,11 @@ func (kmv KMinValues) Swap(i, j int) {
 	kmv.Data[i], kmv.Data[j] = kmv.Data[j], kmv.Data[i]
 }
 
+func (kmv *KMinValues) containsHash(hash int64) bool {
+	found := sort.Search(len(kmv.Data), func(i int) bool { return kmv.Data[i] <= hash })
+	return found < len(kmv.Data) && kmv.Data[found] == hash
+}
+
 // Adds a hash to the KMV and maintains the sorting of the values.
 // Furthermore, we make sure that items we are inserting are unique by
 // searching for them prior to insertion.  We wait to do this seach last
@@ -103,15 +135,13 @@ func (kmv *KMinValues) AddHash(hash int64) bool {
 		if kmv.Data[0] < hash {
 			return false
 		}
-		found := sort.Search(len(kmv.Data), func(i int) bool { return kmv.Data[i] >= hash })
-		if !(found < len(kmv.Data) && kmv.Data[found] == hash) {
+		if !kmv.containsHash(hash) {
 			kmv.Data[0] = hash
 		} else {
 			return false
 		}
 	} else {
-		found := sort.Search(len(kmv.Data), func(i int) bool { return kmv.Data[i] >= hash })
-		if !(found < len(kmv.Data) && kmv.Data[found] == hash) {
+		if !kmv.containsHash(hash) {
 			if cap(kmv.Data) == len(kmv.Data)+1 {
 				kmv.increaseCapacity(n * 2)
 			}
@@ -160,34 +190,53 @@ func (kmv *KMinValues) Cardinality() float64 {
 	if uint64(len(kmv.Data)) < kmv.MaxSize {
 		return float64(len(kmv.Data))
 	}
+	return cardinality(kmv.MaxSize, kmv.Data[0])
+}
 
-	return float64(kmv.MaxSize-1.0) / (float64(kmv.Data[0])/float64(1<<64-1) + 0.5)
+func (kmv *KMinValues) CardinalityIntersection(others ...*KMinValues) float64 {
+	X, n := DirectSum(append(others, kmv)...)
+	return float64(n) / float64(X.MaxSize) * X.Cardinality()
+
+}
+
+func (kmv *KMinValues) CardinalityUnion(others ...*KMinValues) float64 {
+	X, _ := DirectSum(append(others, kmv)...)
+	return X.Cardinality()
+
+}
+
+func (kmv *KMinValues) Jaccard(others ...*KMinValues) float64 {
+	// There has to be a better way than this append crap
+	X, n := DirectSum(append(others, kmv)...)
+	return float64(n) / float64(X.MaxSize)
 }
 
 // Returns a new KMinValues object is the union between the current and the
 // given objects
-func (kmv *KMinValues) Union(others ...KMinValues) KMinValues {
-	maxsize := kmv.MaxSize
-	for _, other := range others {
-		if maxsize > other.MaxSize {
-			maxsize = other.MaxSize
-		}
-	}
-
-	newkmv := NewKMinValues(maxsize)
-
-	for _, h := range kmv.Data {
-		newkmv.AddHash(h)
-	}
-	for _, other := range others {
-		for _, h := range other.Data {
-			newkmv.AddHash(h)
-		}
-	}
-
-	return newkmv
+func (kmv *KMinValues) Union(others ...*KMinValues) *KMinValues {
+	return Union(append(others, kmv)...)
 }
 
 func (kmv *KMinValues) RelativeError() float64 {
 	return math.Sqrt(2.0 / (math.Pi * float64(kmv.MaxSize-2)))
+}
+
+func DirectSum(others ...*KMinValues) (*KMinValues, int) {
+	n := 0
+	X := Union(others...)
+	// TODO: can we optimize this loop somehow?
+	var found bool
+	for _, xHash := range X.Data {
+		found = true
+		for _, other := range others {
+			if !other.containsHash(xHash) {
+				found = false
+				break
+			}
+		}
+		if found {
+			n += 1
+		}
+	}
+	return X, n
 }
