@@ -45,7 +45,7 @@ type AddHashRequest struct {
 
 type ResizeRequest struct {
 	Key        string
-	NewSize    uint64
+	NewSize    int
 	ResultChan chan Result
 }
 

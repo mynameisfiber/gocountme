@@ -9,7 +9,7 @@ import (
 )
 
 var Hash_Max = 1<<31 - 1
-var Default_KMinValues_Size = uint64(4) //1 << 10)
+var Default_KMinValues_Size = 1 << 10
 
 func Union(others ...*KMinValues) *KMinValues {
 	maxsize := smallestK(others...)
@@ -24,11 +24,11 @@ func Union(others ...*KMinValues) *KMinValues {
 	return newkmv
 }
 
-func cardinality(maxSize uint64, kMin int64) float64 {
+func cardinality(maxSize int, kMin int64) float64 {
 	return float64(maxSize-1.0) / (float64(kMin)/float64(1<<64-1) + 0.5)
 }
 
-func smallestK(others ...*KMinValues) uint64 {
+func smallestK(others ...*KMinValues) int {
 	minsize := others[0].MaxSize
 	for _, other := range others[1:] {
 		if minsize > other.MaxSize {
@@ -40,10 +40,10 @@ func smallestK(others ...*KMinValues) uint64 {
 
 type KMinValues struct {
 	Data    []int64 `json:'data'`
-	MaxSize uint64  `json:'k'`
+	MaxSize int     `json:'k'`
 }
 
-func NewKMinValues(capacity uint64) *KMinValues {
+func NewKMinValues(capacity int) *KMinValues {
 	return &KMinValues{
 		Data:    make([]int64, 0, capacity),
 		MaxSize: capacity,
@@ -56,15 +56,17 @@ func KMinValuesFromBytes(raw []byte) *KMinValues {
 	}
 	buf := bytes.NewBuffer(raw)
 
-	var maxSize uint64
-	err := binary.Read(buf, binary.LittleEndian, &maxSize)
+	var maxSizeTmp uint32
+	var maxSize int
+	err := binary.Read(buf, binary.LittleEndian, &maxSizeTmp)
 	if err != nil {
 		log.Println("error reading size")
 		return NewKMinValues(Default_KMinValues_Size)
 	}
+	maxSize = int(maxSizeTmp)
 
-	s := uint64((len(raw) - 8) / 8)
-	c := uint64(2*s + 1)
+	s := (len(raw) - 8) / 8
+	c := 2*s + 1
 	if c > maxSize {
 		c = maxSize
 	}
@@ -75,13 +77,19 @@ func KMinValuesFromBytes(raw []byte) *KMinValues {
 	}
 
 	var tmp int64
+	i := 0
 	for {
 		err := binary.Read(buf, binary.LittleEndian, &tmp)
 		if err != nil {
 			break
 		}
+		if i > maxSize {
+			log.Printf("error: kmv has too many elements (MaxSize = %d)", maxSize)
+			break
+		}
 		if tmp != 0 {
-			kmv.AddHash(tmp)
+			kmv.Data = append(kmv.Data, tmp)
+			i++
 		}
 	}
 	return &kmv
@@ -91,7 +99,7 @@ func (kmv *KMinValues) Bytes() []byte {
 	// TODO: error checking here
 	buf := new(bytes.Buffer)
 
-	err := binary.Write(buf, binary.LittleEndian, uint64(kmv.MaxSize))
+	err := binary.Write(buf, binary.LittleEndian, uint32(kmv.MaxSize))
 	if err != nil {
 		log.Println("Error writing size:", err.Error())
 	}
@@ -130,7 +138,7 @@ func (kmv *KMinValues) containsHash(hash int64) bool {
 // because it is computationally expensive so we attempt to throw away the hash
 // in every way possible before performing it.
 func (kmv *KMinValues) AddHash(hash int64) bool {
-	n := uint64(len(kmv.Data))
+	n := len(kmv.Data)
 	if n == kmv.MaxSize {
 		if kmv.Data[0] < hash {
 			return false
@@ -156,9 +164,9 @@ func (kmv *KMinValues) AddHash(hash int64) bool {
 
 // Resize the KMinValues datastructure by changing the MaxSize and resizing any
 // data currently being stored in the structure.
-func (kmv *KMinValues) Resize(newsize uint64) error {
+func (kmv *KMinValues) Resize(newsize int) error {
 	// TODO: This doesn't do what you expect... fix
-	items := uint64(len(kmv.Data))
+	items := len(kmv.Data)
 	if items > newsize {
 		items = newsize
 	}
@@ -167,8 +175,8 @@ func (kmv *KMinValues) Resize(newsize uint64) error {
 }
 
 // Adds extra capacity to the underlying []int64 array that stores the hashes
-func (kmv *KMinValues) increaseCapacity(newcap uint64) bool {
-	N := uint64(cap(kmv.Data))
+func (kmv *KMinValues) increaseCapacity(newcap int) bool {
+	N := cap(kmv.Data)
 	if newcap < N {
 		return false
 	}
@@ -187,7 +195,7 @@ func (kmv *KMinValues) increaseCapacity(newcap uint64) bool {
 }
 
 func (kmv *KMinValues) Cardinality() float64 {
-	if uint64(len(kmv.Data)) < kmv.MaxSize {
+	if len(kmv.Data) < kmv.MaxSize {
 		return float64(len(kmv.Data))
 	}
 	return cardinality(kmv.MaxSize, kmv.Data[0])
@@ -206,7 +214,6 @@ func (kmv *KMinValues) CardinalityUnion(others ...*KMinValues) float64 {
 }
 
 func (kmv *KMinValues) Jaccard(others ...*KMinValues) float64 {
-	// There has to be a better way than this append crap
 	X, n := DirectSum(append(others, kmv)...)
 	return float64(n) / float64(X.MaxSize)
 }

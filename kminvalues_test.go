@@ -11,7 +11,7 @@ import (
 
 func TestKMinValuesConstruct(t *testing.T) {
 	kmv := NewKMinValues(50)
-	assert.Equal(t, kmv.MaxSize, uint64(50))
+	assert.Equal(t, kmv.MaxSize, 50)
 	assert.Equal(t, len(kmv.Data), 0)
 	assert.Equal(t, cap(kmv.Data), 50)
 }

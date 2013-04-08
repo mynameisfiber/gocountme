@@ -1,5 +1,7 @@
 package main
 
+import _ "net/http/pprof"
+
 import (
 	"flag"
 	"fmt"
@@ -18,7 +20,7 @@ var (
 	showVersion     = flag.Bool("version", false, "print version string")
 	httpAddress     = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
 	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
-	defaultSize     = flag.Int64("default-size", 512, "Default size for KMin Value sets")
+	defaultSize     = flag.Int("default-size", 512, "Default size for KMin Value sets")
 	leveldbLRUCache = flag.Int("lru-cache", 1<<10, "LRU Cache size for LevelDB")
 )
 
@@ -186,7 +188,7 @@ func main() {
 	}
 
 	log.Println("Opening levelDB")
-	Default_KMinValues_Size = uint64(*defaultSize)
+	Default_KMinValues_Size = *defaultSize
 	opts := levigo.NewOptions()
 	opts.SetCache(levigo.NewLRUCache(*leveldbLRUCache))
 	opts.SetCreateIfMissing(true)
