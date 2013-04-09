@@ -105,19 +105,6 @@ func (kmv *KMinValues) Bytes() []byte {
 
 func (kmv *KMinValues) Len() int { return len(kmv.Raw) / BytesUint64 }
 
-func (kmv *KMinValues) Less(i, j int) bool {
-	// Reversed logic for reverse order
-	// Also, we use BigEndian ordering to make this easy
-	return bytes.Compare(kmv.GetHashBytes(i), kmv.GetHashBytes(j)) > 0
-}
-
-func (kmv *KMinValues) Swap(i, j int) {
-	ib, jb := i*BytesUint64, j*BytesUint64
-	for n := 0; n < BytesUint64; n++ {
-		kmv.Raw[ib+n], kmv.Raw[jb+n] = kmv.Raw[jb+n], kmv.Raw[ib+n]
-	}
-}
-
 func (kmv *KMinValues) SetHash(i int, hash []byte) {
 	ib := i * BytesUint64
 	for n := 0; n < BytesUint64; n++ {
@@ -131,16 +118,39 @@ func (kmv *KMinValues) FindHash(hash uint64) int {
 }
 
 func (kmv *KMinValues) FindHashBytes(hash []byte) int {
-	found := sort.Search(kmv.Len(), func(i int) bool { return bytes.Compare(kmv.GetHashBytes(i), hash) <= 0 })
-	if found < kmv.Len() && bytes.Equal(kmv.GetHashBytes(found), hash) {
-		return found
+	idx, found := kmv.LocateHashBytes(hash)
+	if found {
+		return idx
 	}
 	return -1
+}
+
+func (kmv *KMinValues) LocateHashBytes(hash []byte) (int, bool) {
+	found := sort.Search(kmv.Len(), func(i int) bool { return bytes.Compare(kmv.GetHashBytes(i), hash) <= 0 })
+	if found < kmv.Len() && bytes.Equal(kmv.GetHashBytes(found), hash) {
+		return found, true
+	}
+	return found, false
 }
 
 func (kmv *KMinValues) AddHash(hash uint64) bool {
 	hashBytes := HashUint64ToBytes(hash)
 	return kmv.AddHashBytes(hashBytes)
+}
+
+func (kmv *KMinValues) popSet(idx int, hash []byte) {
+	for i := 1; i < idx; i++ {
+		kmv.SetHash(i-1, kmv.GetHashBytes(i))
+	}
+	kmv.SetHash(idx-1, hash)
+}
+
+func (kmv *KMinValues) insert(idx int, hash []byte) {
+	kmv.Raw = append(kmv.Raw, make([]byte, BytesUint64)...)
+	for i := kmv.Len() - 1; i > idx; i-- {
+		kmv.SetHash(i, kmv.GetHashBytes(i-1))
+	}
+	kmv.SetHash(idx, hash)
 }
 
 // Adds a hash to the KMV and maintains the sorting of the values.
@@ -154,22 +164,23 @@ func (kmv *KMinValues) AddHashBytes(hash []byte) bool {
 		if bytes.Compare(kmv.GetHashBytes(0), hash) < 0 {
 			return false
 		}
-		if kmv.FindHashBytes(hash) == -1 {
-			kmv.SetHash(0, hash)
+		idx, found := kmv.LocateHashBytes(hash)
+		if !found {
+			kmv.popSet(idx, hash)
 		} else {
 			return false
 		}
 	} else {
-		if kmv.FindHashBytes(hash) == -1 {
+		idx, found := kmv.LocateHashBytes(hash)
+		if !found {
 			if cap(kmv.Raw) == len(kmv.Raw)+1 {
 				kmv.increaseCapacity(len(kmv.Raw) * 2)
 			}
-			kmv.Raw = append(kmv.Raw, hash...)
+			kmv.insert(idx, hash)
 		} else {
 			return false
 		}
 	}
-	sort.Sort(kmv)
 	return true
 }
 

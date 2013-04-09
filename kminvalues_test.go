@@ -61,8 +61,8 @@ func TestKMinValuesSimple(t *testing.T) {
 
 	assert.Equal(t, kmv.MaxSize, kmv.Len())
 
-	for i := 0; i < kmv.Len(); i++ {
-		assert.Equal(t, kmv.GetHash(i), uint64(kmv.Len()-i))
+	for i, k := range []uint64{5, 4, 3, 2, 1} {
+		assert.Equal(t, kmv.GetHash(i), k)
 	}
 
 	kmv.AddHash(2)
