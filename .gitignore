@@ -1,3 +1,4 @@
 *.sw[op]
 db/
 gocountme
+loadtest/

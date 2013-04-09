@@ -39,7 +39,7 @@ type DeleteRequest struct {
 
 type AddHashRequest struct {
 	Key        string
-	Hash       int64
+	Hash       uint64
 	ResultChan chan Result
 }
 
@@ -127,25 +127,8 @@ func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, w
 }
 
 func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
-	if rr.Key == "" {
-		return nil, NoKeySpecified
-	}
-
-	keyBytes := []byte(rr.Key)
-
-	data, err := database.Get(ro, keyBytes)
-	if err != nil {
-		return nil, err
-	}
-
-	kmv := KMinValuesFromBytes(data)
-	err = kmv.Resize(rr.NewSize)
-	if err != nil {
-		return kmv, err
-	}
-
-	err = database.Put(wo, keyBytes, kmv.Bytes())
-	return kmv, err
+	// TODO: fix this
+	return nil, fmt.Errorf("Not implemented")
 }
 
 func levelDBWorker(database *levigo.DB, requestChan chan RequestCommand) error {

@@ -119,7 +119,7 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 		HttpError(w, 500, "MISSING_ARG_HASH")
 		return
 	}
-	hash, err := strconv.ParseInt(hash_raw, 10, 64)
+	hash, err := strconv.ParseUint(hash_raw, 10, 64)
 	if err != nil {
 		HttpResponse(w, 500, "INVALID_ARG_HASH")
 		return

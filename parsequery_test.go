@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-func TestUnionCard(t *testing.T) {
+func TestParseQuery(t *testing.T) {
 	SetupDB()
 	query := `
 {
