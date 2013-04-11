@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"sync"
 )
@@ -22,6 +23,7 @@ var (
 	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
 	defaultSize     = flag.Int("default-size", 512, "Default size for KMin Value sets")
 	leveldbLRUCache = flag.Int("lru-cache", 1<<10, "LRU Cache size for LevelDB")
+	dblocation      = flag.String("db", ".", "Database location")
 )
 
 func GetHandler(w http.ResponseWriter, r *http.Request) {
@@ -141,6 +143,111 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func JaccardHandler(w http.ResponseWriter, r *http.Request) {
+	reqParams, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HttpError(w, 500, "INVALID_URI")
+		return
+	}
+
+	if len(reqParams["key"]) != 2 {
+		HttpError(w, 500, "MUST_PROVIDE_2_KEYS")
+		return
+	}
+
+	key1 := reqParams["key"][0]
+	if key1 == "" {
+		HttpError(w, 500, "MISSING_ARG_KEY")
+		return
+	}
+
+	key2 := reqParams["key"][1]
+	if key2 == "" {
+		HttpError(w, 500, "MISSING_ARG_KEY")
+		return
+	}
+
+	resultChan := make(chan Result, 2)
+
+	getRequest1 := GetRequest{
+		Key:        key1,
+		ResultChan: resultChan,
+	}
+	RequestChan <- getRequest1
+	result1 := <-resultChan
+
+	getRequest2 := GetRequest{
+		Key:        key2,
+		ResultChan: resultChan,
+	}
+	RequestChan <- getRequest2
+	result2 := <-resultChan
+
+	if result1.Error != nil {
+		HttpResponse(w, 500, result1.Error.Error())
+	} else if result2.Error != nil {
+		HttpResponse(w, 500, result2.Error.Error())
+	} else {
+		jac := result1.Data.Jaccard(result2.Data)
+		HttpResponse(w, 200, QueryResult{Num: jac})
+	}
+}
+
+func CorrelationMatrixHandler(w http.ResponseWriter, r *http.Request) {
+	reqParams, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HttpError(w, 500, "INVALID_URI")
+		return
+	}
+
+	if _, found := reqParams["key"]; !found {
+		HttpError(w, 500, "MISSING_ARG_KEY")
+		return
+	}
+
+	N := len(reqParams["key"])
+	if N < 2 {
+		HttpError(w, 500, "MUST_PROVIDE_2+_KEYS")
+		return
+	}
+
+	resultChan := make(chan Result, N)
+	defer close(resultChan)
+	kmvs := make([]*Result, N)
+	for _, key := range reqParams["key"] {
+		getRequest := GetRequest{
+			Key:        key,
+			ResultChan: resultChan,
+		}
+		RequestChan <- getRequest
+	}
+
+	for i := 0; i < N; i++ {
+		result := <-resultChan
+		if result.Error != nil {
+			HttpError(w, 500, result.Error.Error())
+			return
+		}
+		kmvs[i] = &result
+	}
+
+	type correlationMatrixElement struct {
+		Keys    [2]string
+		Jaccard float64
+	}
+
+	matrix := make([]correlationMatrixElement, 0, N*(N-1)/2)
+	for i, r1 := range kmvs[:N-1] {
+		for _, r2 := range kmvs[i+1:] {
+			key := [2]string{r1.Key, r2.Key}
+			j := r1.Data.Jaccard(r2.Data)
+			matrix = append(matrix, correlationMatrixElement{key, j})
+		}
+	}
+
+	HttpResponse(w, 200, matrix)
+}
+
 func QueryHandler(w http.ResponseWriter, r *http.Request) {
 	reqParams, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
@@ -187,12 +294,19 @@ func main() {
 		return
 	}
 
+	if _, err := os.Stat(*dblocation); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Database location does not exist:", *dblocation)
+			return
+		}
+	}
+
 	log.Println("Opening levelDB")
 	Default_KMinValues_Size = *defaultSize
 	opts := levigo.NewOptions()
 	opts.SetCache(levigo.NewLRUCache(*leveldbLRUCache))
 	opts.SetCreateIfMissing(true)
-	db, err := levigo.Open("./db/tmp", opts)
+	db, err := levigo.Open(*dblocation, opts)
 	defer db.Close()
 
 	if err != nil {
@@ -213,6 +327,8 @@ func main() {
 	http.HandleFunc("/get", GetHandler)
 	http.HandleFunc("/delete", DeleteHandler)
 	http.HandleFunc("/cardinality", CardinalityHandler)
+	http.HandleFunc("/jaccard", JaccardHandler)
+	http.HandleFunc("/correlation", CorrelationMatrixHandler)
 	http.HandleFunc("/add", AddHandler)
 	http.HandleFunc("/query", QueryHandler)
 	http.HandleFunc("/exit", ExitHandler)
