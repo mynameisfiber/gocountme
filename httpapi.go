@@ -26,6 +26,11 @@ var (
 	dblocation      = flag.String("db", ".", "Database location")
 )
 
+type correlationMatrixElement struct {
+	Keys    [2]string `json:"keys"`
+	Jaccard float64   `json:"jaccard"`
+}
+
 func GetHandler(w http.ResponseWriter, r *http.Request) {
 	reqParams, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
@@ -229,11 +234,6 @@ func CorrelationMatrixHandler(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		kmvs[i] = &result
-	}
-
-	type correlationMatrixElement struct {
-		Keys    [2]string
-		Jaccard float64
 	}
 
 	matrix := make([]correlationMatrixElement, 0, N*(N-1)/2)

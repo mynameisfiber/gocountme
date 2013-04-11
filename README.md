@@ -18,11 +18,18 @@ the following endpoints:
 
 /delete : `key` parameter designating which set to delete
 
+/add : `key` and `hash` parameters saying which set to add the given hash to.
+Hashes are signed 64bit integers
+
 /cardinality : `key` parameter designating which set to calculate the
 cardinality of
 
-/add : `key` and `hash` parameters saying which set to add the given hash to.
-Hashes are signed 64bit integers
+/jaccard : two `key` parameter designating which sets to calculate the jaccard
+index between.
+
+/correlation : two or more `key` parameters to calculate the correlation matrix
+of.  The return value is a list of dictionaries of the form `{"keys" : ["key1",
+"key2"], "jaccard" : 0.02}`
 
 /query : `q` which is a url encoded json specifying the desired query (more
 about queries below)
