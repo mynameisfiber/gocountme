@@ -143,9 +143,7 @@ func (kmv *KMinValues) Len() int { return len(kmv.Raw) / BytesUint64 }
 
 func (kmv *KMinValues) SetHash(i int, hash []byte) {
 	ib := i * BytesUint64
-	for n := 0; n < BytesUint64; n++ {
-		kmv.Raw[ib+n] = hash[n]
-	}
+	copy(kmv.Raw[ib:], hash)
 }
 
 func (kmv *KMinValues) FindHash(hash uint64) int {
@@ -175,18 +173,16 @@ func (kmv *KMinValues) AddHash(hash uint64) bool {
 }
 
 func (kmv *KMinValues) popSet(idx int, hash []byte) {
-	for i := 1; i < idx; i++ {
-		kmv.SetHash(i-1, kmv.GetHashBytes(i))
-	}
-	kmv.SetHash(idx-1, hash)
+	ib := idx * BytesUint64
+	copy(kmv.Raw[:ib-BytesUint64], kmv.Raw[BytesUint64:ib])
+	copy(kmv.Raw[ib-BytesUint64:], hash)
 }
 
 func (kmv *KMinValues) insert(idx int, hash []byte) {
+	ib := idx * BytesUint64
 	kmv.Raw = append(kmv.Raw, make([]byte, BytesUint64)...)
-	for i := kmv.Len() - 1; i > idx; i-- {
-		kmv.SetHash(i, kmv.GetHashBytes(i-1))
-	}
-	kmv.SetHash(idx, hash)
+	copy(kmv.Raw[ib+BytesUint64:], kmv.Raw[ib:])
+	copy(kmv.Raw[ib:], hash)
 }
 
 // Adds a hash to the KMV and maintains the sorting of the values.
@@ -233,9 +229,7 @@ func (kmv *KMinValues) increaseCapacity(newcap int) bool {
 		newcap = kmv.MaxSize * BytesUint64
 	}
 	newarray := make([]byte, len(kmv.Raw), newcap)
-	for i := 0; i < len(kmv.Raw); i++ {
-		newarray[i] = kmv.Raw[i]
-	}
+	copy(newarray[:len(kmv.Raw)], kmv.Raw)
 	kmv.Raw = newarray
 	return true
 }
