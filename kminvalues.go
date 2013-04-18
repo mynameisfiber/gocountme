@@ -29,11 +29,44 @@ func HashBytesToUint64(hashBytes []byte) uint64 {
 
 func Union(others ...*KMinValues) *KMinValues {
 	maxsize := smallestK(others...)
-	newkmv := NewKMinValues(maxsize)
+	maxlen := 0
+	idxs := make([]int, len(others))
+	for i, other := range others {
+		if maxlen < other.Len() {
+			maxlen = other.Len()
+		}
+		idxs[i] = other.Len() - 1
+	}
 
-	for _, other := range others {
-		for i := 0; i < other.Len(); i++ {
-			newkmv.AddHashBytes(other.GetHashBytes(i))
+	// We directly create a kminvalues object here so that we can have raw be
+	// pre-initialized with nil values
+	newkmv := &KMinValues{
+		Raw:     make([]byte, maxlen*BytesUint64, maxsize*BytesUint64),
+		MaxSize: maxsize,
+	}
+
+	var kmin, kminTmp []byte
+	jmin := make([]int, 0, len(others))
+	for i := maxlen - 1; i >= 0; i-- {
+		kmin = nil
+		jmin = jmin[:0]
+		for j, other := range others {
+			kminTmp = other.GetHashBytes(idxs[j])
+			if kminTmp != nil {
+				if kmin == nil || kminTmp != nil && bytes.Compare(kmin, kminTmp) > 0 {
+					kmin = kminTmp
+					jmin = jmin[:0]
+					jmin = append(jmin, j)
+				} else if kmin != nil && bytes.Equal(kmin, kminTmp) {
+					jmin = append(jmin, j)
+				}
+			}
+		}
+		for _, j := range jmin {
+			idxs[j]--
+		}
+		if kmin != nil {
+			newkmv.SetHash(i, kmin)
 		}
 	}
 	return newkmv
@@ -93,6 +126,9 @@ func (kmv *KMinValues) GetHash(i int) uint64 {
 }
 
 func (kmv *KMinValues) GetHashBytes(i int) []byte {
+	if i < 0 || i >= kmv.Len() {
+		return nil
+	}
 	return kmv.Raw[i*BytesUint64 : (i+1)*BytesUint64]
 }
 
