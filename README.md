@@ -18,8 +18,11 @@ the following endpoints:
 
 /delete : `key` parameter designating which set to delete
 
-/add : `key` and `hash` parameters saying which set to add the given hash to.
-Hashes are signed 64bit integers
+/add : `key` and `key` parameters saying which set to add the given value to.
+The value is hashed with a `murmur3` hasing function.
+
+/addhash : `key` and `hash` parameters saying which set to add the given hash to.
+The hash must be a valid uint64 type.
 
 /cardinality : `key` parameter designating which set to calculate the
 cardinality of

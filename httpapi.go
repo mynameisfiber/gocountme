@@ -3,9 +3,11 @@ package main
 import _ "net/http/pprof"
 
 import (
+	"encoding/binary"
 	"flag"
 	"fmt"
 	"github.com/jmhodges/levigo"
+	"github.com/reusee/mmh3"
 	"log"
 	"net/http"
 	"net/url"
@@ -108,7 +110,40 @@ func CardinalityHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func Hashify(orig []byte) uint64 {
+	h := mmh3.Hash128(orig)
+	return binary.LittleEndian.Uint64(h)
+}
+
 func AddHandler(w http.ResponseWriter, r *http.Request) {
+	reqParams, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HttpError(w, 500, "INVALID_URI")
+		return
+	}
+
+	key := reqParams.Get("key")
+	if key == "" {
+		HttpError(w, 500, "MISSING_ARG_KEY")
+		return
+	}
+
+	value := reqParams.Get("value")
+	if value == "" {
+		HttpError(w, 500, "MISSING_ARG_VALUE")
+		return
+	}
+	hash := Hashify([]byte(value))
+
+	result := addHash(key, hash)
+	if result.Error == nil {
+		HttpResponse(w, 200, "OK")
+	} else {
+		HttpResponse(w, 500, result.Error.Error())
+	}
+}
+
+func AddHashHandler(w http.ResponseWriter, r *http.Request) {
 	reqParams, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
 		HttpError(w, 500, "INVALID_URI")
@@ -132,20 +167,24 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	result := addHash(key, hash)
+	if result.Error == nil {
+		HttpResponse(w, 200, "OK")
+	} else {
+		HttpResponse(w, 500, result.Error.Error())
+	}
+}
+
+func addHash(key string, hash uint64) Result {
 	resultChan := make(chan Result)
+	defer close(resultChan)
 	addHashRequest := AddHashRequest{
 		Key:        key,
 		Hash:       hash,
 		ResultChan: resultChan,
 	}
 	RequestChan <- addHashRequest
-	result := <-resultChan
-	close(resultChan)
-	if result.Error == nil {
-		HttpResponse(w, 200, "OK")
-	} else {
-		HttpResponse(w, 500, err.Error())
-	}
+	return <-resultChan
 }
 
 func JaccardHandler(w http.ResponseWriter, r *http.Request) {
@@ -330,6 +369,7 @@ func main() {
 	http.HandleFunc("/jaccard", JaccardHandler)
 	http.HandleFunc("/correlation", CorrelationMatrixHandler)
 	http.HandleFunc("/add", AddHandler)
+	http.HandleFunc("/addhash", AddHashHandler)
 	http.HandleFunc("/query", QueryHandler)
 	http.HandleFunc("/exit", ExitHandler)
 
