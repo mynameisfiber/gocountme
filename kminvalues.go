@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"log"
 	"math"
 	"sort"
@@ -87,8 +88,22 @@ func smallestK(others ...*KMinValues) int {
 }
 
 type KMinValues struct {
-	Raw     []byte `json:'data'`
-	MaxSize int    `json:'k'`
+	Raw     []byte
+	MaxSize int
+}
+
+func (kmv *KMinValues) MarshalJSON() ([]byte, error) {
+	var buffer bytes.Buffer
+	N := kmv.Len()
+	fmt.Fprintf(&buffer, `{"k":%d, "data":[`, kmv.MaxSize)
+	for n := 0; n < N; n++ {
+		if n == N-1 {
+			fmt.Fprintf(&buffer, "%d]}", kmv.GetHash(n))
+		} else {
+			fmt.Fprintf(&buffer, "%d,", kmv.GetHash(n))
+		}
+	}
+	return buffer.Bytes(), nil
 }
 
 func NewKMinValues(capacity int) *KMinValues {

@@ -23,8 +23,8 @@ var (
 	showVersion     = flag.Bool("version", false, "print version string")
 	httpAddress     = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
 	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
-	defaultSize     = flag.Int("default-size", 512, "Default size for KMin Value sets")
-	leveldbLRUCache = flag.Int("lru-cache", 1<<10, "LRU Cache size for LevelDB")
+	defaultSize     = flag.Int("default-size", 1024, "Default size for KMin Value sets")
+	leveldbLRUCache = flag.Int("lru-cache", 1<<16, "LRU Cache size for LevelDB")
 	dblocation      = flag.String("db", ".", "Database location")
 )
 
@@ -124,6 +124,7 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 
 	key := reqParams.Get("key")
 	if key == "" {
+		log.Println(r.URL.RawQuery)
 		HttpError(w, 500, "MISSING_ARG_KEY")
 		return
 	}

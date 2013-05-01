@@ -53,6 +53,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 var (
@@ -71,8 +72,10 @@ type Element struct {
 }
 
 type QueryResult struct {
-	Kmv *KMinValues `json:"set"`
-	Num float64     `json:"result"`
+	Key   string         `json:"key"`
+	Kmv   *KMinValues    `json:"set"`
+	Num   float64        `json:"result"`
+	Multi []*QueryResult `json:"multi_result,omitempty"`
 }
 
 func ParseQuery(query_raw []byte) (*QueryResult, error) {
@@ -91,6 +94,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 	}
 
 	var data []*KMinValues
+	var keys []string
 
 	if len(e.Keys) != 0 {
 		data = make([]*KMinValues, len(e.Keys))
@@ -114,8 +118,10 @@ func parseQuery(e *Element) (*QueryResult, error) {
 				close(resultChan)
 			}
 		}
+		keys = e.Keys
 	} else if len(e.Set) != 0 {
 		data = make([]*KMinValues, len(e.Set))
+		keys = make([]string, len(e.Set))
 		for i := 0; i < len(e.Set); i++ {
 			tmp, err := parseQuery(&e.Set[i])
 			if err != nil {
@@ -124,6 +130,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 				return nil, SetNeedsKMV
 			}
 			data[i] = tmp.Kmv
+			keys[i] = tmp.Key
 		}
 	}
 
@@ -131,36 +138,73 @@ func parseQuery(e *Element) (*QueryResult, error) {
 		if len(data) != 1 {
 			return nil, CardinalitySingleTermError
 		}
-		return &QueryResult{Num: data[0].Cardinality()}, nil
+		return &QueryResult{
+			Key: fmt.Sprintf("||%s||", keys[0]),
+			Num: data[0].Cardinality(),
+		}, nil
 	} else if e.Method == "get" {
 		if len(data) != 1 {
 			return nil, CardinalitySingleTermError
 		}
-		return &QueryResult{Kmv: data[0]}, nil
+		return &QueryResult{
+			Key: keys[0],
+			Kmv: data[0],
+		}, nil
 	} else if e.Method == "union" {
 		if len(data) < 2 {
 			return nil, MethodSetSize
 		}
 		tmp := data[0].Union(data[1:]...)
-		return &QueryResult{Kmv: tmp}, nil
+		return &QueryResult{
+			Key: strings.Join(keys, " u "),
+			Kmv: tmp,
+		}, nil
 	} else if e.Method == "jaccard" {
 		if len(data) < 2 {
 			return nil, MethodSetSize
 		}
 		tmp := data[0].Jaccard(data[1:]...)
-		return &QueryResult{Num: tmp}, nil
+		return &QueryResult{
+			Key: fmt.Sprintf("Jaccard(%s)", strings.Join(keys, ", ")),
+			Num: tmp,
+		}, nil
 	} else if e.Method == "cardinality_intersection" {
 		if len(data) < 2 {
 			return nil, MethodSetSize
 		}
 		tmp := data[0].CardinalityIntersection(data[1:]...)
-		return &QueryResult{Num: tmp}, nil
+		return &QueryResult{
+			Key: fmt.Sprintf("||%s||", strings.Join(keys, " n ")),
+			Num: tmp,
+		}, nil
 	} else if e.Method == "cardinality_union" {
 		if len(data) < 2 {
 			return nil, MethodSetSize
 		}
 		tmp := data[0].CardinalityUnion(data[1:]...)
-		return &QueryResult{Num: tmp}, nil
+		return &QueryResult{
+			Key: fmt.Sprintf("||%s||", strings.Join(keys, " u ")),
+			Num: tmp,
+		}, nil
+	} else if e.Method == "correlation" {
+		if len(data) < 2 {
+			return nil, MethodSetSize
+		}
+
+		N := len(data)
+		correlation := make([]*QueryResult, 0, N*(N-1)/2)
+		for i, r1 := range data[:N-1] {
+			for j, r2 := range data[i+1:] {
+				correlation = append(correlation, &QueryResult{
+					Key: fmt.Sprintf("Jaccard(%s, %s)", keys[i], keys[j+i+1]),
+					Num: r1.Jaccard(r2),
+				})
+			}
+		}
+		return &QueryResult{
+			Key:   fmt.Sprintf("Corr(%s)", strings.Join(keys, ", ")),
+			Multi: correlation,
+		}, nil
 	}
 	return nil, InvalidMethod
 }
