@@ -2,11 +2,11 @@ package main
 
 //
 //    in order to request:
-//    
+//
 //        Jaccard( key1 u key2, key8 n key3 )
-//    
+//
 //    we request:
-//    
+//
 //    {
 //        "method" : "jaccard",
 //        "set" : [
@@ -18,18 +18,18 @@ package main
 //                "method" : "intersection",
 //                "keys" : ["key8", "key3"],
 //            },
-//    
+//
 //        ]
 //    }
-//    
+//
 //    ============================================
-//    
+//
 //    in order to request:
-//    
+//
 //        Card( (key1 u key2 u key3) n key5)
-//    
+//
 //    we request:
-//    
+//
 //    {
 //        "method" : "cardinality",
 //        "set" : [
@@ -52,17 +52,19 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"github.com/mynameisfiber/gocountme/kminvalues"
 	"strings"
 )
 
 var (
-	KeysAndSetError            = fmt.Errorf("Both keys and set are specified in query")
-	CardinalitySingleTermError = fmt.Errorf("Method 'cardinality' can only take in one data source")
-	GetSingleTermError         = fmt.Errorf("Method 'get' can only take in one data source")
-	SetNeedsKMV                = fmt.Errorf("Set specified with float output")
-	InvalidMethod              = fmt.Errorf("Unrecognized method")
-	MethodSetSize              = fmt.Errorf("Method requires 2+ sets or keys")
+	KeysAndSetError            = errors.New("Both keys and set are specified in query")
+	CardinalitySingleTermError = errors.New("Method 'cardinality' can only take in one data source")
+	GetSingleTermError         = errors.New("Method 'get' can only take in one data source")
+	SetNeedsKMV                = errors.New("Set specified with float output")
+	InvalidMethod              = errors.New("Unrecognized method")
+	MethodSetSize              = errors.New("Method requires 2+ sets or keys")
 )
 
 type Element struct {
@@ -72,10 +74,10 @@ type Element struct {
 }
 
 type QueryResult struct {
-	Key   string         `json:"key"`
-	Kmv   *KMinValues    `json:"set"`
-	Num   float64        `json:"result"`
-	Multi []*QueryResult `json:"multi_result,omitempty"`
+	Key   string                 `json:"key"`
+	Kmv   *kminvalues.KMinValues `json:"set"`
+	Num   float64                `json:"result"`
+	Multi []*QueryResult         `json:"multi_result,omitempty"`
 }
 
 func ParseQuery(query_raw []byte) (*QueryResult, error) {
@@ -93,11 +95,11 @@ func parseQuery(e *Element) (*QueryResult, error) {
 		return nil, KeysAndSetError
 	}
 
-	var data []*KMinValues
+	var data []*kminvalues.KMinValues
 	var keys []string
 
 	if len(e.Keys) != 0 {
-		data = make([]*KMinValues, len(e.Keys))
+		data = make([]*kminvalues.KMinValues, len(e.Keys))
 		resultChan := make(chan Result, len(e.Keys)+1)
 		for _, key := range e.Keys {
 			getRequest := GetRequest{
@@ -120,7 +122,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 		}
 		keys = e.Keys
 	} else if len(e.Set) != 0 {
-		data = make([]*KMinValues, len(e.Set))
+		data = make([]*kminvalues.KMinValues, len(e.Set))
 		keys = make([]string, len(e.Set))
 		for i := 0; i < len(e.Set); i++ {
 			tmp, err := parseQuery(&e.Set[i])

@@ -1,23 +1,25 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/jmhodges/levigo"
+	"github.com/mynameisfiber/gocountme/kminvalues"
 )
 
 var (
-	NoKeySpecified = fmt.Errorf("No Key supplied for db Request")
-	NotImplemented = fmt.Errorf("Not Implemented")
+	NoKeySpecified = errors.New("No Key supplied for db Request")
+	NotImplemented = errors.New("Not Implemented")
 )
 
 type Result struct {
 	Key   string
-	Data  *KMinValues
+	Data  *kminvalues.KMinValues
 	Error error
 }
 
 type RequestCommand interface {
-	Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error)
+	Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error)
 	WriteResult(result Result)
 }
 
@@ -28,7 +30,7 @@ type GetRequest struct {
 
 type SetRequest struct {
 	Key        string
-	Kmv        *KMinValues
+	Kmv        *kminvalues.KMinValues
 	ResultChan chan Result
 }
 
@@ -70,7 +72,7 @@ func (rr ResizeRequest) WriteResult(result Result) {
 	rr.ResultChan <- result
 }
 
-func (gr GetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+func (gr GetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error) {
 	if gr.Key == "" {
 		return nil, NoKeySpecified
 	}
@@ -80,12 +82,11 @@ func (gr GetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *le
 		return nil, err
 	}
 
-	// TODO: add error handling in FromBytes
-	kmv := KMinValuesFromBytes(data)
-	return kmv, nil
+	kmv, err := kminvalues.KMinValuesFromBytes(data)
+	return kmv, err
 }
 
-func (sr SetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+func (sr SetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error) {
 	if sr.Key == "" {
 		return nil, NoKeySpecified
 	}
@@ -96,7 +97,7 @@ func (sr SetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *le
 	return sr.Kmv, err
 }
 
-func (dr DeleteRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+func (dr DeleteRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error) {
 	if dr.Key == "" {
 		return nil, NoKeySpecified
 	}
@@ -107,7 +108,7 @@ func (dr DeleteRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo 
 	return nil, err
 }
 
-func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error) {
 	if ahr.Key == "" {
 		return nil, NoKeySpecified
 	}
@@ -119,14 +120,21 @@ func (ahr AddHashRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, w
 		return nil, err
 	}
 
-	kmv := KMinValuesFromBytes(data)
+	kmv, err := kminvalues.KMinValuesFromBytes(data)
+	if err != nil {
+		if len(data) == 0 {
+			kmv = kminvalues.NewKMinValues(*defaultSize)
+		} else {
+			return nil, err
+		}
+	}
 	kmv.AddHash(ahr.Hash)
 
 	err = database.Put(wo, keyBytes, kmv.Bytes())
 	return kmv, err
 }
 
-func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*KMinValues, error) {
+func (rr ResizeRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *levigo.WriteOptions) (*kminvalues.KMinValues, error) {
 	// TODO: fix this
 	return nil, fmt.Errorf("Not implemented")
 }

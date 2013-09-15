@@ -3,9 +3,20 @@ package main
 import (
 	"github.com/bmizerany/assert"
 	"github.com/jmhodges/levigo"
+	"github.com/mynameisfiber/gocountme/kminvalues"
 	"log"
 	"testing"
+	"math/rand"
 )
+
+func GetRandHash() uint64 {
+	hash := uint64(rand.Int63())
+	if rand.Intn(2) == 0 {
+		hash += 1 << 63
+	}
+	return hash
+}
+
 
 func TestDB(t *testing.T) {
 	SetupDB()
@@ -25,7 +36,7 @@ func TestDB(t *testing.T) {
 	clean()
 	defer clean()
 
-	kmv := NewKMinValues(50)
+	kmv := kminvalues.NewKMinValues(50)
 
 	for i := 0; i < 100; i++ {
 		kmv.AddHash(GetRandHash())
