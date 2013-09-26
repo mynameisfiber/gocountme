@@ -1,4 +1,4 @@
-package main
+package kminvalues
 
 import (
 	"encoding/binary"
@@ -12,9 +12,9 @@ import (
 
 func TestKMinValuesConstruct(t *testing.T) {
 	kmv := NewKMinValues(50)
-	assert.Equal(t, kmv.MaxSize, 50)
-	assert.Equal(t, len(kmv.Raw), 0)
-	assert.Equal(t, cap(kmv.Raw), 50*BytesUint64)
+	assert.Equal(t, kmv.maxSize, 50)
+	assert.Equal(t, len(kmv.raw), 0)
+	assert.Equal(t, cap(kmv.raw), 50*bytesUint64)
 }
 
 func GetRandHash() uint64 {
@@ -38,9 +38,10 @@ func TestKMinValuesBytes(t *testing.T) {
 	}
 
 	bkmv := kmv.Bytes()
-	kmv2 := KMinValuesFromBytes(bkmv)
+	kmv2, err := KMinValuesFromBytes(bkmv)
+	assert.Equal(t, err, nil)
 
-	assert.Equal(t, kmv.MaxSize, kmv2.MaxSize)
+	assert.Equal(t, kmv.maxSize, kmv2.maxSize)
 	for i := 0; i < kmv.Len(); i++ {
 		assert.Equal(t, kmv.GetHash(i), kmv2.GetHash(i))
 	}
@@ -59,7 +60,7 @@ func TestKMinValuesSimple(t *testing.T) {
 	kmv.AddHash(5)
 	kmv.AddHash(6)
 
-	assert.Equal(t, kmv.MaxSize, kmv.Len())
+	assert.Equal(t, kmv.maxSize, kmv.Len())
 
 	for i, k := range []uint64{5, 4, 3, 2, 1} {
 		assert.Equal(t, kmv.GetHash(i), k)

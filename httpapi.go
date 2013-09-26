@@ -342,7 +342,6 @@ func main() {
 	}
 
 	log.Println("Opening levelDB")
-	Default_KMinValues_Size = *defaultSize
 	opts := levigo.NewOptions()
 	opts.SetCache(levigo.NewLRUCache(*leveldbLRUCache))
 	opts.SetCreateIfMissing(true)

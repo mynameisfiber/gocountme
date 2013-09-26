@@ -1,26 +1,24 @@
-package main
+package kminvalues
 
 import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
-	"log"
 	"math"
+	"errors"
 	"sort"
 )
 
-const BytesUint64 = 8
-const Hash_Max = float64(1<<64 - 1)
+const bytesUint64 = 8
+const hashMax = float64(1<<64 - 1)
 
-var Default_KMinValues_Size = 1 << 10
-
-func HashUint64ToBytes(hash uint64) []byte {
+func hashUint64ToBytes(hash uint64) []byte {
 	hashBytes := new(bytes.Buffer)
 	binary.Write(hashBytes, binary.BigEndian, hash)
 	return hashBytes.Bytes()
 }
 
-func HashBytesToUint64(hashBytes []byte) uint64 {
+func hashBytesToUint64(hashBytes []byte) uint64 {
 	// TODO: error checking here
 	var hash uint64
 	hashReader := bytes.NewBuffer(hashBytes)
@@ -42,8 +40,8 @@ func Union(others ...*KMinValues) *KMinValues {
 	// We directly create a kminvalues object here so that we can have raw be
 	// pre-initialized with nil values
 	newkmv := &KMinValues{
-		Raw:     make([]byte, maxlen*BytesUint64, maxsize*BytesUint64),
-		MaxSize: maxsize,
+		raw:     make([]byte, maxlen*bytesUint64, maxsize*bytesUint64),
+		maxSize: maxsize,
 	}
 
 	var kmin, kminTmp []byte
@@ -52,7 +50,7 @@ func Union(others ...*KMinValues) *KMinValues {
 		kmin = nil
 		jmin = jmin[:0]
 		for j, other := range others {
-			kminTmp = other.GetHashBytes(idxs[j])
+			kminTmp = other.getHashBytes(idxs[j])
 			if kminTmp != nil {
 				if kmin == nil || kminTmp != nil && bytes.Compare(kmin, kminTmp) > 0 {
 					kmin = kminTmp
@@ -74,28 +72,28 @@ func Union(others ...*KMinValues) *KMinValues {
 }
 
 func cardinality(maxSize int, kMin uint64) float64 {
-	return float64(maxSize-1.0) * Hash_Max / float64(kMin)
+	return float64(maxSize-1.0) * hashMax / float64(kMin)
 }
 
 func smallestK(others ...*KMinValues) int {
-	minsize := others[0].MaxSize
+	minsize := others[0].maxSize
 	for _, other := range others[1:] {
-		if minsize > other.MaxSize {
-			minsize = other.MaxSize
+		if minsize > other.maxSize {
+			minsize = other.maxSize
 		}
 	}
 	return minsize
 }
 
 type KMinValues struct {
-	Raw     []byte
-	MaxSize int
+	raw     []byte
+	maxSize int
 }
 
 func (kmv *KMinValues) MarshalJSON() ([]byte, error) {
 	var buffer bytes.Buffer
 	N := kmv.Len()
-	fmt.Fprintf(&buffer, `{"k":%d, "data":[`, kmv.MaxSize)
+	fmt.Fprintf(&buffer, `{"k":%d, "data":[`, kmv.maxSize)
 	for n := 0; n < N; n++ {
 		if n == N-1 {
 			fmt.Fprintf(&buffer, "%d]}", kmv.GetHash(n))
@@ -108,14 +106,14 @@ func (kmv *KMinValues) MarshalJSON() ([]byte, error) {
 
 func NewKMinValues(capacity int) *KMinValues {
 	return &KMinValues{
-		Raw:     make([]byte, 0, capacity*BytesUint64),
-		MaxSize: capacity,
+		raw:     make([]byte, 0, capacity*bytesUint64),
+		maxSize: capacity,
 	}
 }
 
-func KMinValuesFromBytes(raw []byte) *KMinValues {
+func KMinValuesFromBytes(raw []byte) (*KMinValues, error) {
 	if len(raw) == 0 {
-		return NewKMinValues(Default_KMinValues_Size)
+		return nil, errors.New("error reading data")
 	}
 	buf := bytes.NewBuffer(raw)
 
@@ -123,46 +121,45 @@ func KMinValuesFromBytes(raw []byte) *KMinValues {
 	var maxSize int
 	err := binary.Read(buf, binary.BigEndian, &maxSizeTmp)
 	if err != nil {
-		log.Println("error reading size")
-		return NewKMinValues(Default_KMinValues_Size)
+		return nil, errors.New("error reading size")
 	}
 	maxSize = int(maxSizeTmp)
 
-	kmv := KMinValues{
-		Raw:     raw[BytesUint64:],
-		MaxSize: maxSize,
+	kmv := &KMinValues{
+		raw:     raw[bytesUint64:],
+		maxSize: maxSize,
 	}
-	return &kmv
+	return kmv, nil
 }
 
 func (kmv *KMinValues) GetHash(i int) uint64 {
-	hashBytes := kmv.Raw[i*BytesUint64 : (i+1)*BytesUint64]
-	return HashBytesToUint64(hashBytes)
+	hashBytes := kmv.raw[i*bytesUint64 : (i+1)*bytesUint64]
+	return hashBytesToUint64(hashBytes)
 }
 
-func (kmv *KMinValues) GetHashBytes(i int) []byte {
+func (kmv *KMinValues) getHashBytes(i int) []byte {
 	if i < 0 || i >= kmv.Len() {
 		return nil
 	}
-	return kmv.Raw[i*BytesUint64 : (i+1)*BytesUint64]
+	return kmv.raw[i*bytesUint64 : (i+1)*bytesUint64]
 }
 
 func (kmv *KMinValues) Bytes() []byte {
-	sizeBytes := make([]byte, BytesUint64, BytesUint64+len(kmv.Raw))
-	binary.BigEndian.PutUint64(sizeBytes, uint64(kmv.MaxSize))
-	result := append(sizeBytes, kmv.Raw...)
+	sizeBytes := make([]byte, bytesUint64, bytesUint64+len(kmv.raw))
+	binary.BigEndian.PutUint64(sizeBytes, uint64(kmv.maxSize))
+	result := append(sizeBytes, kmv.raw...)
 	return result
 }
 
-func (kmv *KMinValues) Len() int { return len(kmv.Raw) / BytesUint64 }
+func (kmv *KMinValues) Len() int { return len(kmv.raw) / bytesUint64 }
 
 func (kmv *KMinValues) SetHash(i int, hash []byte) {
-	ib := i * BytesUint64
-	copy(kmv.Raw[ib:], hash)
+	ib := i * bytesUint64
+	copy(kmv.raw[ib:], hash)
 }
 
 func (kmv *KMinValues) FindHash(hash uint64) int {
-	hashBytes := HashUint64ToBytes(hash)
+	hashBytes := hashUint64ToBytes(hash)
 	return kmv.FindHashBytes(hashBytes)
 }
 
@@ -175,29 +172,29 @@ func (kmv *KMinValues) FindHashBytes(hash []byte) int {
 }
 
 func (kmv *KMinValues) LocateHashBytes(hash []byte) (int, bool) {
-	found := sort.Search(kmv.Len(), func(i int) bool { return bytes.Compare(kmv.GetHashBytes(i), hash) <= 0 })
-	if found < kmv.Len() && bytes.Equal(kmv.GetHashBytes(found), hash) {
+	found := sort.Search(kmv.Len(), func(i int) bool { return bytes.Compare(kmv.getHashBytes(i), hash) <= 0 })
+	if found < kmv.Len() && bytes.Equal(kmv.getHashBytes(found), hash) {
 		return found, true
 	}
 	return found, false
 }
 
 func (kmv *KMinValues) AddHash(hash uint64) bool {
-	hashBytes := HashUint64ToBytes(hash)
+	hashBytes := hashUint64ToBytes(hash)
 	return kmv.AddHashBytes(hashBytes)
 }
 
 func (kmv *KMinValues) popSet(idx int, hash []byte) {
-	ib := idx * BytesUint64
-	copy(kmv.Raw[:ib-BytesUint64], kmv.Raw[BytesUint64:ib])
-	copy(kmv.Raw[ib-BytesUint64:], hash)
+	ib := idx * bytesUint64
+	copy(kmv.raw[:ib-bytesUint64], kmv.raw[bytesUint64:ib])
+	copy(kmv.raw[ib-bytesUint64:], hash)
 }
 
 func (kmv *KMinValues) insert(idx int, hash []byte) {
-	ib := idx * BytesUint64
-	kmv.Raw = append(kmv.Raw, make([]byte, BytesUint64)...)
-	copy(kmv.Raw[ib+BytesUint64:], kmv.Raw[ib:])
-	copy(kmv.Raw[ib:], hash)
+	ib := idx * bytesUint64
+	kmv.raw = append(kmv.raw, make([]byte, bytesUint64)...)
+	copy(kmv.raw[ib+bytesUint64:], kmv.raw[ib:])
+	copy(kmv.raw[ib:], hash)
 }
 
 // Adds a hash to the KMV and maintains the sorting of the values.
@@ -207,8 +204,8 @@ func (kmv *KMinValues) insert(idx int, hash []byte) {
 // in every way possible before performing it.
 func (kmv *KMinValues) AddHashBytes(hash []byte) bool {
 	n := kmv.Len()
-	if n >= kmv.MaxSize {
-		if bytes.Compare(kmv.GetHashBytes(0), hash) < 0 {
+	if n >= kmv.maxSize {
+		if bytes.Compare(kmv.getHashBytes(0), hash) < 0 {
 			return false
 		}
 		idx, found := kmv.LocateHashBytes(hash)
@@ -220,8 +217,8 @@ func (kmv *KMinValues) AddHashBytes(hash []byte) bool {
 	} else {
 		idx, found := kmv.LocateHashBytes(hash)
 		if !found {
-			if cap(kmv.Raw) == len(kmv.Raw)+1 {
-				kmv.increaseCapacity(len(kmv.Raw) * 2)
+			if cap(kmv.raw) == len(kmv.raw)+1 {
+				kmv.increaseCapacity(len(kmv.raw) * 2)
 			}
 			kmv.insert(idx, hash)
 		} else {
@@ -232,33 +229,33 @@ func (kmv *KMinValues) AddHashBytes(hash []byte) bool {
 }
 
 // Adds extra capacity to the underlying []uint64 array that stores the hashes
-func (kmv *KMinValues) increaseCapacity(newcap int) bool {
-	N := cap(kmv.Raw)
+func (kmv *KMinValues) increaseCapacity(newcap int) error {
+	N := cap(kmv.raw)
 	if newcap < N {
-		return false
+		return errors.New("already at that capacity")
 	}
-	if newcap/BytesUint64 > kmv.MaxSize {
-		if N == kmv.MaxSize*BytesUint64 {
-			return false
+	if newcap/bytesUint64 > kmv.maxSize {
+		if N == kmv.maxSize*bytesUint64 {
+			return errors.New("at max capacity")
 		}
-		newcap = kmv.MaxSize * BytesUint64
+		newcap = kmv.maxSize * bytesUint64
 	}
-	newarray := make([]byte, len(kmv.Raw), newcap)
-	copy(newarray[:len(kmv.Raw)], kmv.Raw)
-	kmv.Raw = newarray
-	return true
+	newarray := make([]byte, len(kmv.raw), newcap)
+	copy(newarray[:len(kmv.raw)], kmv.raw)
+	kmv.raw = newarray
+	return nil
 }
 
 func (kmv *KMinValues) Cardinality() float64 {
-	if kmv.Len() < kmv.MaxSize {
+	if kmv.Len() < kmv.maxSize {
 		return float64(kmv.Len())
 	}
-	return cardinality(kmv.MaxSize, kmv.GetHash(0))
+	return cardinality(kmv.maxSize, kmv.GetHash(0))
 }
 
 func (kmv *KMinValues) CardinalityIntersection(others ...*KMinValues) float64 {
 	X, n := DirectSum(append(others, kmv)...)
-	return float64(n) / float64(X.MaxSize) * X.Cardinality()
+	return float64(n) / float64(X.maxSize) * X.Cardinality()
 
 }
 
@@ -270,7 +267,7 @@ func (kmv *KMinValues) CardinalityUnion(others ...*KMinValues) float64 {
 
 func (kmv *KMinValues) Jaccard(others ...*KMinValues) float64 {
 	X, n := DirectSum(append(others, kmv)...)
-	return float64(n) / float64(X.MaxSize)
+	return float64(n) / float64(X.maxSize)
 }
 
 // Returns a new KMinValues object is the union between the current and the
@@ -280,7 +277,7 @@ func (kmv *KMinValues) Union(others ...*KMinValues) *KMinValues {
 }
 
 func (kmv *KMinValues) RelativeError() float64 {
-	return math.Sqrt(2.0 / (math.Pi * float64(kmv.MaxSize-2)))
+	return math.Sqrt(2.0 / (math.Pi * float64(kmv.maxSize-2)))
 }
 
 func DirectSum(others ...*KMinValues) (*KMinValues, int) {
@@ -289,7 +286,7 @@ func DirectSum(others ...*KMinValues) (*KMinValues, int) {
 	// TODO: can we optimize this loop somehow?
 	var found bool
 	for i := 0; i < X.Len(); i++ {
-		xHash := X.GetHashBytes(i)
+		xHash := X.getHashBytes(i)
 		found = true
 		for _, other := range others {
 			if other.FindHashBytes(xHash) < 0 {
