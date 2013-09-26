@@ -83,6 +83,13 @@ func (gr GetRequest) Execute(database *levigo.DB, ro *levigo.ReadOptions, wo *le
 	}
 
 	kmv, err := kminvalues.KMinValuesFromBytes(data)
+	if err != nil {
+		if len(data) == 0 {
+			kmv = kminvalues.NewKMinValues(*defaultSize)
+		} else {
+			return nil, err
+		}
+	}
 	return kmv, err
 }
 

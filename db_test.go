@@ -5,8 +5,8 @@ import (
 	"github.com/jmhodges/levigo"
 	"github.com/mynameisfiber/gocountme/kminvalues"
 	"log"
-	"testing"
 	"math/rand"
+	"testing"
 )
 
 func GetRandHash() uint64 {
@@ -16,7 +16,6 @@ func GetRandHash() uint64 {
 	}
 	return hash
 }
-
 
 func TestDB(t *testing.T) {
 	SetupDB()
