@@ -19,7 +19,7 @@ import (
 var RequestChan chan RequestCommand
 
 var (
-	VERSION         = "0.1"
+	VERSION         = "0.2"
 	showVersion     = flag.Bool("version", false, "print version string")
 	httpAddress     = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
 	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
