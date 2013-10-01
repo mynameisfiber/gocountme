@@ -3,9 +3,9 @@ package kminvalues
 import (
 	"bytes"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
-	"errors"
 	"sort"
 )
 

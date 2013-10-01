@@ -98,6 +98,21 @@ func TestKMinValuesCardinality(t *testing.T) {
 	}
 }
 
+func TestKMinValuesCardinalitySmall(t *testing.T) {
+	kmv := NewKMinValues(1000)
+
+	for i := 0; i < 500; i++ {
+		hash := GetHash([]byte(fmt.Sprintf("%d", i)))
+		kmv.AddHash(hash)
+	}
+
+	card := kmv.Cardinality()
+	if card != 500 {
+		t.Errorf("KMV not giving exact cardinality for set size smaller than capacity: %f != 500", card)
+		t.FailNow()
+	}
+}
+
 func TestKMinValuesUnion(t *testing.T) {
 	kmv1 := NewKMinValues(1000)
 	kmv2 := NewKMinValues(1000)
