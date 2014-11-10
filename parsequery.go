@@ -106,7 +106,7 @@ func parseQuery(e *Element) (*QueryResult, error) {
 				Key:        key,
 				ResultChan: resultChan,
 			}
-			RequestChan <- getRequest
+			requestChan <- getRequest
 		}
 		i := 1
 		for result := range resultChan {

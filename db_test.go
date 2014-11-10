@@ -29,7 +29,7 @@ func TestDB(t *testing.T) {
 			Key:        key,
 			ResultChan: resultChan,
 		}
-		RequestChan <- delRequest
+		requestChan <- delRequest
 		<-resultChan
 	}
 	clean()
@@ -48,7 +48,7 @@ func TestDB(t *testing.T) {
 		Kmv:        kmv,
 		ResultChan: resultChan,
 	}
-	RequestChan <- setRequest
+	requestChan <- setRequest
 	result := <-resultChan
 	assert.Equal(t, result.Error, nil)
 
@@ -58,7 +58,7 @@ func TestDB(t *testing.T) {
 			Hash:       GetRandHash(),
 			ResultChan: resultChan,
 		}
-		RequestChan <- addHashRequest
+		requestChan <- addHashRequest
 		result = <-resultChan
 		assert.Equal(t, result.Error, nil)
 	}
@@ -80,13 +80,13 @@ func SetupDB() {
 		log.Panicln(err)
 	}
 
-	RequestChan = make(chan RequestCommand)
+	requestChan = make(chan RequestCommand)
 	go func() {
-		levelDBWorker(db, RequestChan)
+		levelDBWorker(db, requestChan)
 		db.Close()
 	}()
 }
 
 func CloseDB() {
-	close(RequestChan)
+	close(requestChan)
 }

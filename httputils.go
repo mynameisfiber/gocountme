@@ -13,6 +13,13 @@ type HttpResponseJson struct {
 	Data       interface{} `json:"data"`
 }
 
+type MultiResult struct {
+	Key    string `json:"key"`
+	Value  string `json:"value"`
+	Status string `json:"status"`
+	Code   int    `json:"code"`
+}
+
 var (
 	ERROR_RESPONSE = `{"status_code": 500,"data": null,"status_txt": "COULD_NOT_FORMAT_RESULT"}`
 )

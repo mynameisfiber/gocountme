@@ -13,10 +13,11 @@ import (
 	"net/url"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
 )
 
-var RequestChan chan RequestCommand
+var requestChan chan RequestCommand
 
 var (
 	VERSION         = "0.2"
@@ -51,7 +52,7 @@ func GetHandler(w http.ResponseWriter, r *http.Request) {
 		Key:        key,
 		ResultChan: resultChan,
 	}
-	RequestChan <- getRequest
+	requestChan <- getRequest
 	result := <-resultChan
 	close(resultChan)
 	HttpResponse(w, 200, result)
@@ -75,7 +76,7 @@ func DeleteHandler(w http.ResponseWriter, r *http.Request) {
 		Key:        key,
 		ResultChan: resultChan,
 	}
-	RequestChan <- deleteRequest
+	requestChan <- deleteRequest
 	result := <-resultChan
 	close(resultChan)
 	HttpResponse(w, 200, result)
@@ -99,7 +100,7 @@ func CardinalityHandler(w http.ResponseWriter, r *http.Request) {
 		Key:        key,
 		ResultChan: resultChan,
 	}
-	RequestChan <- getRequest
+	requestChan <- getRequest
 	result := <-resultChan
 	close(resultChan)
 	if result.Error == nil {
@@ -144,6 +145,59 @@ func AddHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func AddMultiHandler(w http.ResponseWriter, r *http.Request) {
+	reqParams, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		HttpError(w, 500, "INVALID_URI")
+		return
+	}
+
+	valuesRaw, ok := reqParams["value"]
+	if !ok {
+		HttpError(w, 500, "MISSING_ARG_VALUE")
+		return
+	}
+
+	delimiter := reqParams.Get("delimiter")
+	if delimiter == "" {
+		delimiter = ","
+	}
+
+	results := make([]MultiResult, len(valuesRaw))
+	var values []string
+	for i, item := range valuesRaw {
+		values = strings.SplitN(item, delimiter, 2)
+
+		if len(values) != 2 {
+			results[i] = MultiResult{
+				"",
+				"",
+				"INVALID_VALUE",
+				500,
+			}
+		} else {
+			hash := Hashify([]byte(values[1]))
+			result := addHash(values[0], hash)
+			if result.Error == nil {
+				results[i] = MultiResult{
+					values[0],
+					values[1],
+					"OK",
+					200,
+				}
+			} else {
+				results[i] = MultiResult{
+					values[0],
+					values[1],
+					result.Error.Error(),
+					500,
+				}
+			}
+		}
+	}
+	HttpResponse(w, 200, results)
+}
+
 func AddHashHandler(w http.ResponseWriter, r *http.Request) {
 	reqParams, err := url.ParseQuery(r.URL.RawQuery)
 	if err != nil {
@@ -184,7 +238,7 @@ func addHash(key string, hash uint64) Result {
 		Hash:       hash,
 		ResultChan: resultChan,
 	}
-	RequestChan <- addHashRequest
+	requestChan <- addHashRequest
 	return <-resultChan
 }
 
@@ -218,14 +272,14 @@ func JaccardHandler(w http.ResponseWriter, r *http.Request) {
 		Key:        key1,
 		ResultChan: resultChan,
 	}
-	RequestChan <- getRequest1
+	requestChan <- getRequest1
 	result1 := <-resultChan
 
 	getRequest2 := GetRequest{
 		Key:        key2,
 		ResultChan: resultChan,
 	}
-	RequestChan <- getRequest2
+	requestChan <- getRequest2
 	result2 := <-resultChan
 
 	if result1.Error != nil {
@@ -264,7 +318,7 @@ func CorrelationMatrixHandler(w http.ResponseWriter, r *http.Request) {
 			Key:        key,
 			ResultChan: resultChan,
 		}
-		RequestChan <- getRequest
+		requestChan <- getRequest
 	}
 
 	for i := 0; i < N; i++ {
@@ -318,7 +372,7 @@ func ExitHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func Exit() {
-	close(RequestChan)
+	close(requestChan)
 }
 
 func main() {
@@ -352,13 +406,13 @@ func main() {
 		log.Panicln(err)
 	}
 
-	RequestChan = make(chan RequestCommand, *nWorkers)
+	requestChan = make(chan RequestCommand, *nWorkers)
 	workerWaitGroup := sync.WaitGroup{}
 	log.Printf("Starting %d workers", *nWorkers)
 	for i := 0; i < *nWorkers; i++ {
 		go func(id int) {
 			workerWaitGroup.Add(1)
-			levelDBWorker(db, RequestChan)
+			levelDBWorker(db, requestChan)
 			workerWaitGroup.Done()
 		}(i)
 	}
@@ -369,12 +423,15 @@ func main() {
 	http.HandleFunc("/jaccard", JaccardHandler)
 	http.HandleFunc("/correlation", CorrelationMatrixHandler)
 	http.HandleFunc("/add", AddHandler)
+	http.HandleFunc("/addmulti", AddMultiHandler)
 	http.HandleFunc("/addhash", AddHashHandler)
 	http.HandleFunc("/query", QueryHandler)
 	http.HandleFunc("/exit", ExitHandler)
 
 	log.Printf("Starting gocountme HTTP server on %s", *httpAddress)
+	workerWaitGroup.Add(1)
 	go func() {
+		workerWaitGroup.Done()
 		log.Fatal(http.ListenAndServe(*httpAddress, nil))
 	}()
 
