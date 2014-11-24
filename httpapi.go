@@ -20,7 +20,7 @@ import (
 var requestChan chan RequestCommand
 
 var (
-	VERSION         = "0.2"
+	VERSION         = "0.2.1"
 	showVersion     = flag.Bool("version", false, "print version string")
 	httpAddress     = flag.String("http", ":8080", "HTTP service address (e.g., ':8080')")
 	nWorkers        = flag.Int("nworkers", 1, "Number of workers interacting with the DB")
@@ -324,15 +324,16 @@ func CorrelationMatrixHandler(w http.ResponseWriter, r *http.Request) {
 	for i := 0; i < N; i++ {
 		result := <-resultChan
 		if result.Error != nil {
-			HttpError(w, 500, result.Error.Error())
-			return
+			N -= 1
+			i -= 1
+		} else {
+			kmvs[i] = &result
 		}
-		kmvs[i] = &result
 	}
 
 	matrix := make([]correlationMatrixElement, 0, N*(N-1)/2)
 	for i, r1 := range kmvs[:N-1] {
-		for _, r2 := range kmvs[i+1:] {
+		for _, r2 := range kmvs[i+1 : N] {
 			key := [2]string{r1.Key, r2.Key}
 			j := r1.Data.Jaccard(r2.Data)
 			matrix = append(matrix, correlationMatrixElement{key, j})
